@@ -1,0 +1,188 @@
+from bs4 import BeautifulSoup
+import requests
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+import json
+import numpy
+import pandas as pd
+
+
+temp_names = []
+temp_values = []
+globalcookies = {}
+middlewaretoken = None
+
+#converts from a set of dicts to a single dict
+def get_cookies(cookies):
+    for dict in cookies:
+        for k, v in dict.items():
+            if k == "name":
+                temp_names.append(v)
+            if k == "value":
+                temp_values.append(v)
+
+    cookie_dict = {
+        temp_names[2] : temp_values[2],
+        temp_names[1] : temp_values[1],
+        temp_names[0] : temp_values[0]
+    }
+
+  
+    return cookie_dict
+
+#Sends a post request with search data after ripping cookies and other authentication data from request data and the selenium driver
+def get_searchResults(firstname, lastname, start_date):
+
+    global middlewaretoken
+    global globalcookies
+    data = {
+    'draw': '1',
+        'columns[0][data]': '0',
+        'columns[0][name]': '',
+        'columns[0][searchable]': 'true',
+        'columns[0][orderable]': 'true',
+        'columns[0][search][value]': '',
+        'columns[0][search][regex]': 'false',
+        'columns[1][data]': '1',
+        'columns[1][name]': '',
+        'columns[1][searchable]': 'true',
+        'columns[1][orderable]': 'true',
+        'columns[1][search][value]': '',
+        'columns[1][search][regex]': 'false',
+        'columns[2][data]': '2',
+        'columns[2][name]': '',
+        'columns[2][searchable]': 'true',
+        'columns[2][orderable]': 'true',
+        'columns[2][search][value]': '',
+        'columns[2][search][regex]': 'false',
+        'columns[3][data]': '3',
+        'columns[3][name]': '',
+        'columns[3][searchable]': 'true',
+        'columns[3][orderable]': 'true',
+        'columns[3][search][value]': '',
+        'columns[3][search][regex]': 'false',
+        'columns[4][data]': '4',
+        'columns[4][name]': '',
+        'columns[4][searchable]': 'true',
+        'columns[4][orderable]': 'true',
+        'columns[4][search][value]': '',
+        'columns[4][search][regex]': 'false',
+        'order[0][column]': '1',
+        'order[0][dir]': 'asc',
+        'order[1][column]': '0',
+        'order[1][dir]': 'asc',
+        'start': '0',
+        'length': '25',
+        'search[value]': '',
+        'search[regex]': 'false',
+        'report_types': '[]',
+        'filer_types': '[]',
+        'submitted_start_date': start_date,
+        'submitted_end_date': '',
+        'candidate_state': '',
+        'senator_state': '',
+        'office_id': '',
+        'first_name': firstname,
+        'last_name': lastname
+    }
+
+    options = Options()
+    options.headless = True
+
+    driver = webdriver.Chrome(executable_path = "C:\\Users\Dominick\Desktop\chromedriver.exe", options = options)
+
+    url = "https://efdsearch.senate.gov/"
+
+    driver.get(url)
+
+    tokensoup = BeautifulSoup(driver.page_source, 'html.parser')
+
+    tokendict = tokensoup.find('input', attrs={'name': 'csrfmiddlewaretoken'})
+
+    middlewaretoken = tokendict['value']
+
+    driver.find_element_by_xpath("//input[@id='agree_statement']").click()
+
+    cookies = driver.get_cookies()
+
+    post_cookies = get_cookies(cookies)
+    
+    globalcookies = post_cookies
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:80.0) Gecko/20100101 Firefox/80.0',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+        'X-Requested-With': 'XMLHttpRequest',
+        'Origin': 'https://efdsearch.senate.gov',
+        'Connection': 'keep-alive',
+        'Referer': 'https://efdsearch.senate.gov/search/',
+        'X-CSRFToken': temp_values[2]
+            }
+
+    r = requests.post('https://efdsearch.senate.gov/search/report/data/', headers = headers, cookies = post_cookies, data = data)
+
+    return BeautifulSoup(r.text, 'html.parser')
+
+
+#takes soup links and converts them into usable strings within a list
+def cleanSearchResults(argsoup):
+    list = []
+    
+    for a in argsoup.find_all('a', href=True):
+        tempstring = a['href'].replace("\\", "")
+        tempstring.strip('"')
+        tempstring2 = tempstring.replace('"',"")
+        list.append(tempstring2)
+
+    return list
+
+#Returns a list of tables pulled from each link in search results
+def ripLink(soup):
+    tablelist = []
+    listoflinks = cleanSearchResults(soup)
+
+    headers = {
+        'Host' : 'efdsearch.senate.gov',
+       'Connection' : 'keep-alive',
+        'Upgrade-Insecure-Requests' : '1',
+        'User-Agent' : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.141 Safari/537.36',
+        'Accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+        'Sec-Fetch-Site' : 'none',
+        'Sec-Fetch-Mode' : 'navigate',
+        'Sec-Fetch-Dest' : 'document',
+        'Accept-Encoding' : 'gzip, deflate, br',
+        'Accept-Language': 'en-US,en;q=0.9'
+    }
+
+
+
+    data = {
+        'prohibition_agreement' : '1',
+        'csrfmiddlewaretoken' : middlewaretoken
+    }
+
+    for l in listoflinks:
+
+        r2 = requests.get('https://efdsearch.senate.gov' + l, headers = headers, data = data, cookies = globalcookies)
+        
+        tablesoup = BeautifulSoup(r2.content, 'html.parser')
+
+        table = tablesoup.findAll('table')
+
+        for a in table:
+            dataframe = pd.read_html(str(a))
+            tablelist.append(dataframe)
+   
+    return tablelist
+
+
+def Brutus(firstname, lastname, start_date):
+
+    soup = get_searchResults(firstname, lastname, start_date + ' 00:00:00')
+    tables = ripLink(soup)
+    for a in tables:
+        print(a)
+    
+    return tables
