@@ -173,7 +173,9 @@ def ripLink(soup):
 
         for a in table:
             dataframe = pd.read_html(str(a))
+            
             tablelist.append(dataframe)
+            
    
     return tablelist
 
@@ -182,7 +184,12 @@ def Brutus(firstname, lastname, start_date):
 
     soup = get_searchResults(firstname, lastname, start_date + ' 00:00:00')
     tables = ripLink(soup)
+    tables[0][0].drop(labels='Unnamed: 0', axis=1, inplace=True)
+    #tables[1][0].to_csv(f'C:\\Users\Dominick\Desktop\Brutus\{firstname}_{lastname}.csv')
     for a in tables:
-        print(a)
+        print(a[0])
+        
+        
     
     return tables
+#Brutus('mitt', 'romney', '01/01/2021')
